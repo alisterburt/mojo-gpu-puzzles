@@ -26,6 +26,26 @@ fn pooling(
     global_i = block_dim.x * block_idx.x + thread_idx.x
     local_i = thread_idx.x
     # FILL ME IN (roughly 10 lines)
+    
+    # load element into shared memory
+    if global_i < size:
+        shared[local_i] = a[global_i]
+
+    # synchronize to ensure all threads have loaded data
+    barrier()
+
+    # handle edge cases
+    if global_i == 0:
+        out[global_i] = shared[local_i]
+    elif global_i == 1:
+        out[global_i] = shared[local_i] + shared[local_i - 1]
+    elif 1 < global_i < size:
+        out[global_i] = (
+            shared[local_i  - 2]
+            + shared[local_i - 1]
+            + shared[local_i]
+        )
+    
 
 
 # ANCHOR_END: pooling
