@@ -28,6 +28,35 @@ fn conv_1d_simple[
     local_i = thread_idx.x
     # FILL ME IN (roughly 14 lines)
 
+    # allocated shared memory, one for the input array and one for the conv. kernel
+    shared_a = tb[dtype]().row_major[SIZE]().shared().alloc()
+    shared_b = tb[dtype]().row_major[CONV]().shared().alloc()
+
+    # load data into shared memory
+    if global_i < SIZE:
+        shared_a[local_i] = a[global_i]
+    if local_i < CONV:
+        shared_b[local_i] = b[global_i]
+    
+    # barrier to synchronize all threads
+    barrier()
+
+    # calculate the convolution
+    if global_i < SIZE:
+        var local_sum: out.element_type = 0
+
+        @parameter
+        for j in range(CONV):
+            if local_i + j < SIZE:
+                local_sum += shared_a[local_i + j] * shared_b[j]
+        
+        out[global_i] = local_sum
+
+
+
+
+
+
 
 # ANCHOR_END: conv_1d_simple
 
@@ -51,6 +80,42 @@ fn conv_1d_block_boundary[
     global_i = block_dim.x * block_idx.x + thread_idx.x
     local_i = thread_idx.x
     # FILL ME IN (roughly 18 lines)
+
+    # allocate shared memory with some extra padding for block boundary
+    # need 3 extra elements on RHS if CONV_2 = 4
+    shared_a = tb[dtype]().row_major[SIZE_2 + CONV_2 - 1]().shared().alloc()
+    shared_b = tb[dtype]().row_major[CONV_2]().shared().alloc()
+
+    # load data into shared memory
+    # main block data first
+    if global_i < SIZE_2:
+        shared_a[local_i] = a[global_i]
+    
+    # now use first 3 threads to assign RHS of shared_a
+    if local_i < CONV_2 - 1:
+        next_idx = global_i + TPB
+        if next_idx < SIZE_2:
+            shared_a[local_i + TPB] = a[next_idx]
+        else:
+            shared_a[local_i + TPB] = 0
+    
+    # load conv kernel
+    if local_i < CONV_2:
+        shared_b[local_i] = b[local_i]
+    
+    # synchronize threads after loading
+    barrier()
+
+    # compute the convolution...
+    if global_i < SIZE_2:
+        var local_sum: out.element_type = 0
+
+        @parameter
+        for j in range(CONV_2):
+            if local_i + j < TPB + CONV_2 - 1:
+                local_sum += shared_a[local_i + j] * shared_b[j]
+
+        out[global_i] = local_sum 
 
 
 # ANCHOR_END: conv_1d_block_boundary
