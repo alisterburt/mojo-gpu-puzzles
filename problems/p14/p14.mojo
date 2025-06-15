@@ -109,6 +109,7 @@ fn matmul_tiled[
         async_copy_wait_all()
         barrier()
 
+        @parameter
         for k in range(TPB):
             acc += a_shared[local_row, k] * b_shared[k, local_col]
         barrier()
